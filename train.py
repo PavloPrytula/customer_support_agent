@@ -1,4 +1,3 @@
-# train.py
 import os
 os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 
@@ -148,11 +147,9 @@ model = AutoModelForSequenceClassification.from_pretrained(
 if hasattr(model, "gradient_checkpointing_enable"):
     model.gradient_checkpointing_enable()
 
-# лог-приоры (по train)
 counts = np.array([freq.get(i, 0) for i in range(num_classes)], dtype=np.float32)
 priors = counts / max(counts.sum(), 1.0)
 log_priors = np.log(priors + 1e-8)
-# разные головы у разных моделей
 classification_head = None
 for name in ["classifier", "score"]:
     if hasattr(model, name):
@@ -192,7 +189,7 @@ def focal_loss(logits, targets, alpha, gamma=1.5, eps=1e-8):
     return loss.mean()
 
 # ======================
-# Trainer с кастомным лоссом
+# Trainer
 # ======================
 class BalancedTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
@@ -245,7 +242,7 @@ args = TrainingArguments(
     logging_steps=50,
     eval_accumulation_steps=20,
     report_to="none",
-    fp16=False,                           # включи bf16/fp16 при наличии CUDA
+    fp16=False,
     gradient_accumulation_steps=GRAD_ACC_STEPS,
     dataloader_pin_memory=False,
     dataloader_num_workers=0,
@@ -259,14 +256,14 @@ trainer = BalancedTrainer(
     args=args,
     train_dataset=tokenized["train"],
     eval_dataset=tokenized["validation"],
-    tokenizer=tokenizer,                 # важно: используем tokenizer=..., а не deprecated processing_class
+    tokenizer=tokenizer,
     data_collator=collator,
     compute_metrics=compute_metrics,
     callbacks=[EarlyStoppingCallback(early_stopping_patience=EARLY_STOP_PATIENCE), MPSMemoryCallback(every=5)],
 )
 
 # ======================
-# WeightedRandomSampler для train
+# WeightedRandomSampler for train
 # ======================
 if USE_WEIGHTED_SAMPLER:
     train_y = np.array(train_labels)
