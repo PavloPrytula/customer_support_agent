@@ -33,7 +33,7 @@ from transformers import (
 # ======================
 # CONFIG
 # ======================
-MODEL_NAME = "xlm-roberta-base"          # опционально: "microsoft/mdeberta-v3-base"
+MODEL_NAME = "xlm-roberta-base"
 MAX_LEN = 256
 BATCH_SIZE = 1
 EPOCHS = 8
@@ -45,11 +45,10 @@ WEIGHT_DECAY = 0.01
 EARLY_STOP_PATIENCE = 5
 GRAD_ACC_STEPS = 32
 
-USE_FOCAL_LOSS = True          # фокальный лосс
+USE_FOCAL_LOSS = True
 FOCAL_GAMMA = 1.5
-USE_WEIGHTED_SAMPLER = True    # взвешенный сэмплинг train-датасета
+USE_WEIGHTED_SAMPLER = True
 
-# фиксированный порядок меток (совместим с генератором CSV)
 LABEL_LIST = ["Other", "Refund request", "Technical issue"]
 
 set_seed(SEED)
@@ -64,18 +63,16 @@ data_files = {
 }
 raw = load_dataset("csv", data_files=data_files)
 
-# NaN -> ""
 def filln(batch):
     batch["text"] = [x if isinstance(x, str) else "" for x in batch["text"]]
     batch["label"] = [y if isinstance(y, str) else "Other" for y in batch["label"]]
     return batch
 raw = raw.map(filln, batched=True)
 
-# Лёгкая очистка: не ломаем *_TOK и любые скобки — оставляем как есть
 def clean_text(t: str) -> str:
     if not isinstance(t, str):
         return ""
-    t = re.sub(r"https?://\S+", " ", t)        # URL → пробел (в CSV уже есть URL_TOK, но на всякий)
+    t = re.sub(r"https?://\S+", " ", t)
     t = re.sub(r"[“”]", '"', t)
     t = re.sub(r"\s+", " ", t).strip()
     return t
@@ -87,9 +84,8 @@ def preprocess(batch):
 raw = raw.map(preprocess, batched=True)
 
 # ======================
-# LABEL MAPPING (стабильный)
+# LABEL MAPPING
 # ======================
-# убеждаемся, что все метки известны; лишние — в Other (на всякий)
 def normalize_label(y: str) -> str:
     return y if y in LABEL_LIST else "Other"
 
@@ -125,7 +121,7 @@ tokenized = raw.map(tok, batched=True, remove_columns=["text", "label"])
 collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
 # ======================
-# CLASS WEIGHTS (по train-сплиту)
+# CLASS WEIGHTS
 # ======================
 train_labels = list(tokenized["train"]["labels"])
 freq = Counter(train_labels)
@@ -141,7 +137,7 @@ class_weights = class_weights / class_weights.mean()
 class_weights = torch.clamp(class_weights, max=5.0)
 
 # ======================
-# MODEL (+ инициализация bias лог-приорами классов)
+# MODEL
 # ======================
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,

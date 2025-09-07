@@ -10,11 +10,11 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 # ==== CONFIG ====
-MODEL_DIR = "model_xlmr"   # путь к сохранённой модели из train.py
-MAX_LEN = 256              # должен совпадать с train.py
-T = 0.8                    # температура softmax ( >1 мягче, <1 острее )
-THRESHOLD = 0.25           # порог для low-confidence по топ-1 вероятности
-MARGIN = 0.10              # доп. критерий: (p1 - p2) < MARGIN → неуверенно
+MODEL_DIR = "model_xlmr"
+MAX_LEN = 256
+T = 0.8
+THRESHOLD = 0.25
+MARGIN = 0.10
 
 # ==== DEVICE ====
 if torch.backends.mps.is_available():
@@ -30,16 +30,15 @@ model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
 model.eval()
 model.to(DEVICE)
 
-# порядок меток берём из конфига модели (задан в train.py)
 id2label = {int(k): v for k, v in model.config.id2label.items()}
 labels = [id2label[i] for i in range(len(id2label))]
 
-# ==== CLEANING (мягкая, не трогаем *_TOK) ====
+# ==== CLEANING ====
 def clean_text(t: str) -> str:
     if not isinstance(t, str):
         return ""
-    t = re.sub(r'https?://\S+', ' ', t)       # URL
-    t = re.sub(r'[“”]', '"', t)               # кавычки
+    t = re.sub(r'https?://\S+', ' ', t)
+    t = re.sub(r'[“”]', '"', t)
     t = re.sub(r'\s+', ' ', t).strip()
     return t
 
@@ -55,18 +54,17 @@ def _encode(texts: List[str]):
     return {k: v.to(DEVICE) for k, v in enc.items()}
 
 def _postprocess_probs(probs_row):
-    # возвращаем [(label, prob), ...] в убывающем порядке
     ranked = sorted(enumerate(probs_row), key=lambda x: x[1], reverse=True)
     return [(labels[i], float(p)) for i, p in ranked]
 
 def predict(text: str, top_k: int = 3) -> Dict[str, Any]:
     """
-    Возвращает:
+    Returns:
       {
         "top": [(label, prob), ...],  # top_k
         "best_label": str,
         "best_prob": float,
-        "is_low_conf": bool,          # best_prob < THRESHOLD или (p1-p2)<MARGIN
+        "is_low_conf": bool,          # best_prob < THRESHOLD or (p1-p2)<MARGIN
         "margin": float               # p1 - p2
       }
     """
@@ -132,10 +130,8 @@ def run_csv(input_path: str, output_path: str, text_col: str = "text", top_k: in
     texts = [r.get(text_col, "") for r in rows]
     preds = predict_batch(texts, top_k=top_k)
 
-    # допишем предсказания в CSV
     fieldnames = list(rows[0].keys()) if rows else [text_col]
     extra_cols = ["pred_label", "pred_prob", "low_conf", "margin"]
-    # top-k вероятности как "label:prob; label:prob; ..."
     extra_cols.append("topk")
     out_fields = fieldnames + extra_cols
 
